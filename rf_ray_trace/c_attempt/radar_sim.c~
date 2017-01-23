@@ -1,0 +1,211 @@
+/*
+	Name: Radar Simulation Program
+	Date: Oct. 31, 2016
+	Author: Devin Huyghebaert
+
+	Create a program to modify IQ samples using a propagation scheme and a user generated ionosphere
+
+*/
+
+#include <stdio.h>
+#include <complex.h>
+#include <math.h>
+
+//generate struct for ionosphere
+//electron_density, drift_velocity, power_refl, spectral_width x altitude x distance (1km resolution)
+struct ionosphere_profile {
+	long double e_density;
+	double drift_vel;
+	double power_refl;
+	double spectral_width;
+};
+
+struct ionosphere_profile test_profile[1000][2000];
+
+//generate structs for the radar path
+//fwd_IQ,rev_IQ,angle_of_prop,altitude,ground_range x sample distance (1km)
+struct signal_path {
+	double complex fwd_IQ;
+	double complex rev_IQ;
+	double angle_of_propagation;
+	double altitude;	
+	double ground_range;
+	double aspect_angle;
+};
+
+struct signal_path current_signal[2000];
+struct signal_path future_signal[2000];
+
+//angle radar ray is propagating
+float input_angle_of_propagation = 20.0;
+
+//resolution between samples
+float range_resolution = 1.0;
+
+//location of radar for magnetic data
+float mag_lat_input = 60.0;
+float mag_long_input = 60.0;
+
+//frequency of signal transmitted
+float input_frequency = 10000000.0;
+
+//input IQ values
+double complex in_IQ[1000];
+
+//output IQ values
+double complex out_IQ[1000];
+
+//variables to hold the reflection effects on IQ
+float mag_reflection = 0.0;
+float phase_reflection = 0.0;
+
+//constants
+#define ELECTRON_CHARGE 1.602E-19
+#define ELECTRON_MASS 9.109E-31
+#define PERM_FREE_SPACE 8.854E-12
+#define EARTH_RADIUS 6371.5
+
+//--------------------------------------------------
+
+int generate_ionosphere(void);
+double calculate_index_of_refraction(double input_altitude,double input_ground_range);
+
+//--------------------------------------------------
+
+int main(void)
+{
+
+int error_code = 0;
+
+//variables to store calculated indices of refraction
+double index_1;
+double index_2;
+
+double temp_altitude;
+double temp_ground_range;
+
+//generate an ionosphere
+error_code = generate_ionosphere();
+
+//set a test pulse
+for (int i=0;i<10;i++)
+	{
+	in_IQ[i] = 1.0 + 1.0 * I;
+	}
+
+//convert the initial angle of propagation to radians
+current_signal[0].angle_of_propagation = (input_angle_of_propagation*M_PI)/180.0;
+
+//create radar ray path
+for (int i=1;i<2000;i++)
+	{
+
+	//Calculate the altitude of the signal
+	temp_altitude = sqrt((range_resolution*range_resolution) + ((EARTH_RADIUS+current_signal[i-1].altitude)*(EARTH_RADIUS+current_signal[i-1].altitude)) - (2.0*range_resolution*(EARTH_RADIUS+current_signal[i-1].altitude)*cos(M_PI/2+current_signal[i-1].angle_of_propagation))) - EARTH_RADIUS;
+
+	temp_ground_range = EARTH_RADIUS * acos((((EARTH_RADIUS+current_signal[i-1].altitude)*(EARTH_RADIUS+current_signal[i-1].altitude)) + ((EARTH_RADIUS+temp_altitude)*(EARTH_RADIUS+temp_altitude)) - (range_resolution*range_resolution))/(2.0*(EARTH_RADIUS+current_signal[i-1].altitude)*(EARTH_RADIUS+temp_altitude)));
+
+	//determine the location of the propagating ray
+	current_signal[i].altitude = temp_altitude;
+	current_signal[i].ground_range = current_signal[i-1].ground_range + temp_ground_range;
+	
+	//calculate the previous index of refraction
+	index_1 = calculate_index_of_refraction(current_signal[i-1].altitude,current_signal[i-1].ground_range);
+	//calculate the index of refraction at the current point
+	index_2 = calculate_index_of_refraction(current_signal[i].altitude,current_signal[i].ground_range);
+
+	//determine the direction of propagation
+	if (current_signal[i].altitude < 0.0)
+		{
+		current_signal[i].angle_of_propagation = -1.0 * current_signal[i-1].angle_of_propagation;
+		current_signal[i].altitude = -1.0*(current_signal[i].altitude);
+		}	
+	else if ( ((index_1/index_2)*sin(M_PI/2.0-current_signal[i-1].angle_of_propagation)) > 1.0)
+		{
+		current_signal[i].angle_of_propagation = -1.0 * current_signal[i-1].angle_of_propagation;
+		}
+	else if (current_signal[i-1].angle_of_propagation < 0.0)
+		{
+		current_signal[i].angle_of_propagation = -(M_PI/2.0) + asin((index_1/index_2)*sin(M_PI/2.0-current_signal[i-1].angle_of_propagation));
+		}
+	else
+		{
+			current_signal[i].angle_of_propagation = (M_PI/2.0) - asin((index_1/index_2)*sin(M_PI/2.0-current_signal[i-1].angle_of_propagation));
+		}
+
+	//correct for Round Earth effects on angle of propagation
+	current_signal[i].angle_of_propagation = current_signal[i].angle_of_propagation + acos((((EARTH_RADIUS+current_signal[i-1].altitude)*(EARTH_RADIUS+current_signal[i-1].altitude)) + ((EARTH_RADIUS+temp_altitude)*(EARTH_RADIUS+temp_altitude)) - (range_resolution*range_resolution))/(2.0*(EARTH_RADIUS+current_signal[i-1].altitude)*(EARTH_RADIUS+temp_altitude)));
+
+	printf("ratio of indices of refraction: %f\n",(index_1/index_2));
+	printf("sin of current signal: %f\n",sin(M_PI/2.0-current_signal[i-1].angle_of_propagation));
+	printf("asin of current signal: %f\n",asin((index_1/index_2)*sin(M_PI/2.0-current_signal[i-1].angle_of_propagation)));	
+	printf("current angle of prop: %f\n",current_signal[i].angle_of_propagation);
+	printf("-----------------------------------\n");
+	}
+
+return 0;
+
+}
+
+//--------------------------------------------------
+
+int generate_ionosphere(void)
+{
+	
+//update ionosphere model
+for (int i=0;i<1000;i++)
+	{
+
+	for (int j=0;j<2000;j++)
+		{
+		//create a linear electron density profile for testing
+		if (i > 50)
+			{
+			test_profile[i][j].e_density = (double)(i+50.0)*(double)(i+500.0)*(double)10000.0;
+			}		
+		}
+	}
+
+return 0;
+
+}
+
+//---------------------------------------------
+
+double calculate_index_of_refraction(double input_altitude,double input_ground_range) 
+{
+
+//variable for plasma freq
+float plasma_freq = 0.0;
+
+//create variable to store calculated index of refraction
+double index_of_refraction;
+
+	printf("ground range: %f altitude: %f \n",input_ground_range,input_altitude);
+
+	if (input_ground_range < 0.0)
+		{
+		input_ground_range=0.0;
+		}
+
+	//determine the plasma frequency of the present and future path
+	plasma_freq = sqrt(test_profile[(int)(input_altitude)][(int)(input_ground_range)].e_density)*ELECTRON_CHARGE/sqrt(PERM_FREE_SPACE*ELECTRON_MASS);
+
+	//calculate the change in the index of refraction
+	index_of_refraction = 1.0 - ((plasma_freq)*(plasma_freq)/((input_frequency)*(input_frequency)));
+
+	printf("ionosphere e density: %Lf\n",test_profile[(int)(input_altitude)][(int)(input_ground_range)].e_density);
+	printf("plasma Frequency: %f\n",plasma_freq);
+	printf("index of refraction: %f\n",index_of_refraction);
+
+return index_of_refraction;
+
+}
+
+//-----------------------------------------------
+/*
+int IQ_modification(general ionospheric parameters)
+{
+
+}
+*/

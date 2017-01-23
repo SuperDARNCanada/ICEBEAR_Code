@@ -1,0 +1,41 @@
+inputs:
+- number of rays
+- ionosphere day or night (use general values initially)
+- pulse sequence (IQ values)
+- input sample rate
+- output sample rate (input must be integer divisible by output)
+- min/max elevation angles for tx
+- antenna radiation pattern?
+- power at antenna
+- frequency of carrier
+
+- how to determine collision rate for Appleton-Hartree?
+
+(should all this be in a config file? just have IQ samples input?)
+
+outputs:
+- stream of IQ voltage samples
+
+Ideas:
+- array of rays propagating
+- each array has all the locations along path, distance between determined by sampling rate
+	- information in array:
+		- forward propagating IQ
+		- reverse propagating IQ
+		- angle of propagation
+		- altitude
+		- ground range
+	- array dimensions:
+		- number of details (5) x distance ray propagates in model
+	- just store reverse propagating IQ at radar
+	-use Appleton-Hartree for determining reflection/propagation/faraday rotation
+- require method of mapping magnetic field (igr?)
+- program in c? or python? c would be faster for processing.
+- for doppler/refl IQ, generate gaussian velocity dist. (plasma effects and doppler spread)
+
+Programming method:
+- generate general ionosphere
+- code Appleton-Hartree equation (calculate electron gyro-freq and collision freq, calculate constant for plasma freq.)
+- determine distance between samples due to sampling rate and speed of light
+- generate angle of propagation for signal and min/max altitude and ground range
+- create single pulse and propagate it through system

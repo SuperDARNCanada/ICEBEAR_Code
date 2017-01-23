@@ -1,0 +1,24 @@
+inputs:
+- resolution (should this be user input?  Require at least freq. wavelength/2 for scatter)
+- lower altitude
+- upper altitude
+- turbulence (how to do this?)
+	-input blobs (size, altitude, location)?
+	-input dominant frequencies in plasma?
+	-input equations for turbulence?
+- bulk plasma motion?
+- day or night
+- solar activity
+
+outputs:
+- array of altitude x distance electron density
+
+should include methods of implementing equations for turbulence/plasma evolution
+need to take into account the curvature of earth
+
+- ionosphere grid includes electron_density, drift_velocity, power_refl, spectral_width
+
+in future: include time with altitude x distance.
+	array with 3 dimensions, time, altitude, ground distance
+
+
